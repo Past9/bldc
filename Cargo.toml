@@ -1,0 +1,15 @@
+[package]
+name = "bldc"
+version = "0.1.0"
+authors = ["Ross Tollefson <past9sys@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+panic-semihosting = "0.5.6"
+cortex-m = "0.7.0"
+cortex-m-rt = "0.6.13"
+cortex-m-semihosting = "0.3.7"
+stm32f303-api = { path = "../../stm32-generated-apis/stm32f303-api", version = "0.1.0" } 
+libm = "0.2.1"
