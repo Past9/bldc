@@ -96,34 +96,34 @@ impl Bldc {
       self.speed = 0f32;
 
       if warnings.has(WarningFlag::Overtemp) {
-        //println!("Overtemp").ok();
+        println!("Overtemp").ok();
       }
       if warnings.has(WarningFlag::TempOver135C) {
-        //println!("Temp over 135 C").ok();
+        println!("Temp over 135 C").ok();
       }
       if warnings.has(WarningFlag::TempOver125C) {
-        //println!("Temp over 125 C").ok();
+        println!("Temp over 125 C").ok();
       }
       if warnings.has(WarningFlag::TempOver105C) {
-        //println!("Temp over 105 C").ok();
+        println!("Temp over 105 C").ok();
       }
       if warnings.has(WarningFlag::ChargePumpUndervolt) {
-        //println!("Charge pump undervolt").ok();
+        println!("Charge pump undervolt").ok();
       }
       if warnings.has(WarningFlag::VdsOvercurrent) {
-        //println!("VDS overcurrent").ok();
+        println!("VDS overcurrent").ok();
       }
       if warnings.has(WarningFlag::PvddOvervolt) {
-        //println!("PVDD overvolt").ok();
+        println!("PVDD overvolt").ok();
       }
       if warnings.has(WarningFlag::PvddUndervolt) {
-        //println!("PVDD undervolt").ok();
+        println!("PVDD undervolt").ok();
       }
       if warnings.has(WarningFlag::TempOver175C) {
-        //println!("Temp over 175 C").ok();
+        println!("Temp over 175 C").ok();
       }
       if warnings.has(WarningFlag::Fault) {
-        //println!("FAULT").ok();
+        println!("FAULT").ok();
       }
     }
 

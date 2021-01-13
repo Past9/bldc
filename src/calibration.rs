@@ -75,7 +75,7 @@ impl CalibrationMode {
           self.settler.add_sample(position_sensor.read_position()?)
         {
           self.forward_extent = forward_extent;
-          //println!("Found forward extent at {} radians", self.forward_extent).ok();
+          println!("Found forward extent at {} radians", self.forward_extent).ok();
           self.phase = Phase::BackwardTurn;
         }
       }
@@ -92,7 +92,7 @@ impl CalibrationMode {
           self.settler.add_sample(position_sensor.read_position()?)
         {
           self.backward_extent = backward_extent;
-          //println!("Found backward extent at {} radians", self.backward_extent).ok();
+          println!("Found backward extent at {} radians", self.backward_extent).ok();
           self.phase = Phase::Done;
         }
       }
