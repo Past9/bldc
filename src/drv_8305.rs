@@ -1,4 +1,3 @@
-use cortex_m_semihosting::hprintln;
 use stm32f303_api::{
   gpio::gpio_b::Pb11Output,
   gpio::gpio_b::{
@@ -80,18 +79,11 @@ impl Drv8305 {
   }
 
   pub fn stop(&mut self) -> Result<()> {
+    self.disable_gate();
     self.spi.wait_for_not_busy()?;
     self.csn.write(DigitalValue::High);
     self.spi.stop();
     Ok(())
-  }
-
-  pub fn get_error(&mut self) -> Result<u16> {
-    self.csn.write(DigitalValue::Low);
-    self.spi.write(0b1000100000000000);
-    self.spi.wait_for_not_busy()?;
-    self.csn.write(DigitalValue::High);
-    Ok(self.spi.read())
   }
 
   pub fn read_warnings(&mut self) -> Result<Warnings> {
@@ -136,6 +128,21 @@ impl Drv8305 {
     self.last_command = command;
     Ok(self.spi.read())
   }
+
+  pub fn return_hardware(mut self, system: &mut System, gpio_b: &mut GpioB) -> Result<()> {
+    self.stop()?;
+    self.spi.stop();
+
+    system.deactivate_spi_i2s_2(self.spi.teardown())?;
+
+    gpio_b.return_pb11(self.en_gate.teardown())?;
+    gpio_b.return_pb12(self.csn.teardown())?;
+    gpio_b.return_pb13(self.sck.teardown())?;
+    gpio_b.return_pb14(self.miso.teardown())?;
+    gpio_b.return_pb15(self.mosi.teardown())?;
+
+    Ok(())
+  }
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -149,7 +156,6 @@ pub enum Command {
 #[derive(Copy, Clone, PartialEq)]
 #[repr(u16)]
 pub enum ReadCommand {
-  Last = 0b10000 << 11,
   Warnings = 0b10001 << 11,
   OvercurrentFaults = 0b10010 << 11,
   IcFaults = 0b10011 << 11,

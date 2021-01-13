@@ -36,6 +36,9 @@ pub struct CurrentController {
   ch_un_pin: Pe8AltFunc<Pe8Tim1Ch1n>,
   ch_vn_pin: Pe10AltFunc<Pe10Tim1Ch2n>,
   ch_wn_pin: Pe12AltFunc<Pe12Tim1Ch3n>,
+
+  angle: f32,
+  power_scale: f32,
 }
 impl CurrentController {
   pub fn new(
@@ -103,10 +106,28 @@ impl CurrentController {
         OutputType::PushPull,
         OutputSpeed::High,
       ),
+      angle: 0f32,
+      power_scale: 0f32,
     })
   }
 
-  pub fn set_angle(&mut self, angle: f32, power_scale: f32) -> Result<()> {
+  pub fn get_angle(&self) -> f32 {
+    self.angle
+  }
+
+  pub fn get_power_scale(&self) -> f32 {
+    self.power_scale
+  }
+
+  pub fn set_power_scale(&mut self, power_scale: f32) -> Result<()> {
+    self.set_angle_and_power(self.angle, power_scale)
+  }
+
+  pub fn set_angle(&mut self, angle: f32) -> Result<()> {
+    self.set_angle_and_power(angle, self.power_scale)
+  }
+
+  pub fn set_angle_and_power(&mut self, angle: f32, power_scale: f32) -> Result<()> {
     let ps = match power_scale {
       s if s < 0f32 => 0f32,
       s if s > 1f32 => 1f32,
@@ -120,6 +141,9 @@ impl CurrentController {
     self.ch_u_pwm.set_duty_cycle(u * ps)?;
     self.ch_v_pwm.set_duty_cycle(v * ps)?;
     self.ch_w_pwm.set_duty_cycle(w * ps)?;
+
+    self.angle = angle;
+    self.power_scale = ps;
 
     Ok(())
   }
@@ -138,6 +162,8 @@ impl CurrentController {
   }
 
   pub fn return_hardware(mut self, system: &mut System, gpio_e: &mut GpioE) -> Result<()> {
+    self.stop();
+
     self.timer.return_ch1(self.ch_u_pwm.teardown()?)?;
     self.timer.return_ch2(self.ch_v_pwm.teardown()?)?;
     self.timer.return_ch3(self.ch_w_pwm.teardown()?)?;
