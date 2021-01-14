@@ -1,5 +1,6 @@
 use crate::{
-  current_controller::CurrentController, drv_8305::Drv8305, position_sensor::PositionSensor, PI2,
+  drv_8305::Drv8305, magnet_controller::MagnetController, math::PI2,
+  position_sensor::PositionSensor,
 };
 use core::fmt::Write;
 use stm32f303_api::Result;
@@ -7,7 +8,7 @@ use stm32f303_api::Result;
 const MAX_DEVIATION: f32 = PI2 / 10000f32;
 const NUM_SAMPLES: usize = 500;
 const SPEED: f32 = 0.002;
-const MAX_TURN: f32 = PI2 * 5f32;
+const MAX_TURN: f32 = PI2 * 2f32;
 
 enum Phase {
   Start,
@@ -28,51 +29,61 @@ pub struct CalibrationMode {
   cumulative_phase_angle: f32,
 }
 impl CalibrationMode {
-  pub fn new() -> Result<Self> {
-    Ok(Self {
+  pub fn new() -> Self {
+    Self {
       phase: Phase::Start,
       zero: 0f32,
       forward_extent: 0f32,
       backward_extent: 0f32,
       settler: Settler::new(),
       cumulative_phase_angle: 0f32,
-    })
+    }
+  }
+
+  pub fn is_done(&self) -> bool {
+    match self.phase {
+      Phase::Done => true,
+      _ => false,
+    }
   }
 
   pub fn step(
     &mut self,
     drv_8305: &mut Drv8305,
-    current_controller: &mut CurrentController,
+    magnet_controller: &mut MagnetController,
     position_sensor: &mut PositionSensor,
   ) -> Result<()> {
     match self.phase {
       Phase::Start => {
         drv_8305.start();
         drv_8305.enable_gate();
-        current_controller.set_angle_and_power(0f32, 0.1f32)?;
+        magnet_controller.set_phase_angle_and_power(0f32, 0.1f32)?;
         self.phase = Phase::Settle;
       }
       Phase::Settle => {
-        if let SettleState::Settled(zero) =
-          self.settler.add_sample(position_sensor.read_position()?)
+        if let SettleState::Settled(zero) = self
+          .settler
+          .add_sample(position_sensor.read_absolute_angle()?)
         {
           self.zero = zero;
+          position_sensor.set_offset(zero);
           println!("Found zero at {} radians", self.zero).ok();
           self.phase = Phase::ForwardTurn;
         }
       }
       Phase::ForwardTurn => {
         self.cumulative_phase_angle += SPEED;
-        current_controller.set_angle(self.cumulative_phase_angle)?;
+        magnet_controller.set_phase_angle(self.cumulative_phase_angle)?;
         if self.cumulative_phase_angle >= MAX_TURN {
-          current_controller.set_angle(MAX_TURN)?;
+          magnet_controller.set_phase_angle(MAX_TURN)?;
           self.settler = Settler::new();
           self.phase = Phase::ForwardSettle;
         }
       }
       Phase::ForwardSettle => {
-        if let SettleState::Settled(forward_extent) =
-          self.settler.add_sample(position_sensor.read_position()?)
+        if let SettleState::Settled(forward_extent) = self
+          .settler
+          .add_sample(position_sensor.read_absolute_angle()?)
         {
           self.forward_extent = forward_extent;
           println!("Found forward extent at {} radians", self.forward_extent).ok();
@@ -81,25 +92,25 @@ impl CalibrationMode {
       }
       Phase::BackwardTurn => {
         self.cumulative_phase_angle -= SPEED;
-        current_controller.set_angle(self.cumulative_phase_angle)?;
+        magnet_controller.set_phase_angle(self.cumulative_phase_angle)?;
         if self.cumulative_phase_angle <= 0f32 {
           self.settler = Settler::new();
           self.phase = Phase::BackwardSettle;
         }
       }
       Phase::BackwardSettle => {
-        if let SettleState::Settled(backward_extent) =
-          self.settler.add_sample(position_sensor.read_position()?)
+        if let SettleState::Settled(backward_extent) = self
+          .settler
+          .add_sample(position_sensor.read_absolute_angle()?)
         {
           self.backward_extent = backward_extent;
           println!("Found backward extent at {} radians", self.backward_extent).ok();
           self.phase = Phase::Done;
+          magnet_controller.set_phase_angle_and_power(0f32, 0f32)?;
+          drv_8305.disable_gate();
         }
       }
-      Phase::Done => {
-        current_controller.set_angle_and_power(0f32, 0f32)?;
-        drv_8305.disable_gate();
-      }
+      Phase::Done => {}
     };
 
     Ok(())

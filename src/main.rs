@@ -25,15 +25,15 @@ macro_rules! println {
   })
 }
 
-const PI: f32 = 3.14159;
-const PI2: f32 = PI * 2f32;
+const NUM_MAGNET_PAIRS: u32 = 20;
 
 extern crate panic_semihosting;
 
 mod bldc;
-mod calibration;
-mod current_controller;
 mod drv_8305;
+mod magnet_controller;
+mod math;
+mod modes;
 mod position_sensor;
 mod runner;
 
@@ -43,5 +43,5 @@ use cortex_m_rt::entry;
 #[entry]
 #[no_mangle]
 fn main() -> ! {
-  runner::run(Bldc::new());
+  runner::run(Bldc::new(NUM_MAGNET_PAIRS));
 }

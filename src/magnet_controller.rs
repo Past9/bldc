@@ -1,5 +1,5 @@
+use core::fmt::Write;
 use core::time::Duration;
-
 use stm32f303_api::{
   gpio::gpio_e::{
     GpioE, Pe10AltFunc, Pe10Tim1Ch2n, Pe11AltFunc, Pe11Tim1Ch2, Pe12AltFunc, Pe12Tim1Ch3n,
@@ -17,12 +17,14 @@ use stm32f303_api::{
   Result, System,
 };
 
+use crate::math::norm_rads;
+
 const PI: f32 = 3.14159;
 const PI2: f32 = PI * 2f32;
 const PI2_3: f32 = PI2 / 3f32;
 const PI4_3: f32 = PI2_3 * 2f32;
 
-pub struct CurrentController {
+pub struct MagnetController {
   timer: Tim1,
 
   ch_u_pwm: Ch1Output,
@@ -37,10 +39,10 @@ pub struct CurrentController {
   ch_vn_pin: Pe10AltFunc<Pe10Tim1Ch2n>,
   ch_wn_pin: Pe12AltFunc<Pe12Tim1Ch3n>,
 
-  angle: f32,
+  phase_angle: f32,
   power_scale: f32,
 }
-impl CurrentController {
+impl MagnetController {
   pub fn new(
     system: &mut System,
     gpio_e: &mut GpioE,
@@ -106,13 +108,13 @@ impl CurrentController {
         OutputType::PushPull,
         OutputSpeed::High,
       ),
-      angle: 0f32,
+      phase_angle: 0f32,
       power_scale: 0f32,
     })
   }
 
-  pub fn get_angle(&self) -> f32 {
-    self.angle
+  pub fn get_phase_angle(&self) -> f32 {
+    self.phase_angle
   }
 
   pub fn get_power_scale(&self) -> f32 {
@@ -120,37 +122,39 @@ impl CurrentController {
   }
 
   pub fn set_power_scale(&mut self, power_scale: f32) -> Result<()> {
-    self.set_angle_and_power(self.angle, power_scale)
+    self.set_phase_angle_and_power(self.phase_angle, power_scale)
   }
 
-  pub fn set_angle(&mut self, angle: f32) -> Result<()> {
-    self.set_angle_and_power(angle, self.power_scale)
+  pub fn set_phase_angle(&mut self, phase_angle: f32) -> Result<()> {
+    self.set_phase_angle_and_power(norm_rads(phase_angle), self.power_scale)
   }
 
-  pub fn set_angle_and_power(&mut self, angle: f32, power_scale: f32) -> Result<()> {
+  pub fn set_phase_angle_and_power(&mut self, phase_angle: f32, power_scale: f32) -> Result<()> {
+    let pa = norm_rads(phase_angle);
+
     let ps = match power_scale {
       s if s < 0f32 => 0f32,
       s if s > 1f32 => 1f32,
       _ => power_scale,
     };
 
-    let u = Self::angle_to_duty_cycle(angle);
-    let v = Self::angle_to_duty_cycle(angle - PI2_3);
-    let w = Self::angle_to_duty_cycle(angle - PI4_3);
+    let u = Self::phase_angle_to_duty_cycle(pa);
+    let v = Self::phase_angle_to_duty_cycle(norm_rads(pa - PI2_3));
+    let w = Self::phase_angle_to_duty_cycle(norm_rads(pa - PI4_3));
 
     self.ch_u_pwm.set_duty_cycle(u * ps)?;
     self.ch_v_pwm.set_duty_cycle(v * ps)?;
     self.ch_w_pwm.set_duty_cycle(w * ps)?;
 
-    self.angle = angle;
+    self.phase_angle = pa;
     self.power_scale = ps;
 
     Ok(())
   }
 
   #[inline]
-  pub fn angle_to_duty_cycle(angle: f32) -> f32 {
-    libm::cosf(angle) / 2f32 + 0.5
+  pub fn phase_angle_to_duty_cycle(phase_angle: f32) -> f32 {
+    libm::cosf(phase_angle) / 2f32 + 0.5
   }
 
   pub fn start(&mut self) {

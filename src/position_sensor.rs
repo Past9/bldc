@@ -6,7 +6,7 @@ use stm32f303_api::{
     },
     DigitalValue, OutputSpeed, OutputType, PullDirection,
   },
-  spi::spi_i2s_1::{MasterRole, MotorolaFrameFormat, Spi, SpiI2s1, SpiProtocol},
+  spi::spi_i2s_1::{MasterRole, MotorolaFrameFormat, Spi, SpiProtocol},
   System,
 };
 use stm32f303_api::{
@@ -14,12 +14,19 @@ use stm32f303_api::{
   Result,
 };
 
-use crate::PI2;
+use crate::math::{norm_rads, PI1_2, PI2};
 
 const POS_MAX_U16: u16 = 0b0011111111111111; // Max value of 14-bit position sensor
 const POS_MAX_F32: f32 = POS_MAX_U16 as f32; // Max value of 14-bit position sensor
 
+fn raw_to_rads(raw: u16) -> f32 {
+  (raw as f32 / POS_MAX_F32) * PI2
+}
+
 pub struct PositionSensor {
+  num_magnet_pairs: u32,
+  offset: f32,
+  rads_per_magnet_pair: f32,
   spi: Spi<SpiProtocol, MotorolaFrameFormat, MasterRole>,
   csn: Pa4Output,
   sck: Pa5AltFunc<Pa5Spi1Sck>,
@@ -28,7 +35,7 @@ pub struct PositionSensor {
   last_command: Command,
 }
 impl PositionSensor {
-  pub fn new(system: &mut System, gpio_a: &mut GpioA) -> Result<Self> {
+  pub fn new(num_magnet_pairs: u32, system: &mut System, gpio_a: &mut GpioA) -> Result<Self> {
     let mut spi: Spi<SpiProtocol, MotorolaFrameFormat, MasterRole> =
       system.activate_spi_i2s_1()?.as_spi();
     spi.enable_software_slave_management();
@@ -39,6 +46,9 @@ impl PositionSensor {
     spi.set_clock_phase(ClockPhase::SecondTransition);
 
     Ok(Self {
+      num_magnet_pairs,
+      offset: 0f32,
+      rads_per_magnet_pair: PI2 / num_magnet_pairs as f32,
       spi,
       csn: gpio_a
         .take_pa4()?
@@ -62,6 +72,15 @@ impl PositionSensor {
     })
   }
 
+  pub fn set_offset(&mut self, offset: f32) {
+    println!("SET OFFSET").ok();
+    self.offset = offset;
+  }
+
+  pub fn get_offset(&self) -> f32 {
+    self.offset
+  }
+
   pub fn start(&mut self) {
     self.csn.write(DigitalValue::High);
     self.spi.start();
@@ -74,9 +93,17 @@ impl PositionSensor {
     Ok(())
   }
 
-  pub fn read_position(&mut self) -> Result<f32> {
-    let raw_pos = (self.read(ReadCommand::Angle)? & POS_MAX_U16) as f32;
-    Ok((raw_pos / POS_MAX_F32) * PI2)
+  pub fn read_absolute_angle(&mut self) -> Result<f32> {
+    let rads = raw_to_rads(self.read(ReadCommand::Angle)? & POS_MAX_U16);
+    Ok(norm_rads(rads - self.offset))
+  }
+
+  pub fn read_phase_angle(&mut self) -> Result<f32> {
+    Ok(
+      (self.read_absolute_angle()? % (PI2 / self.num_magnet_pairs as f32))
+        * self.num_magnet_pairs as f32,
+    )
+    //Ok(self.read_absolute_angle()? * self.num_magnet_pairs as f32)
   }
 
   pub fn read(&mut self, read_command: ReadCommand) -> Result<u16> {
